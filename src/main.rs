@@ -1,6 +1,6 @@
 use clap::{Arg, Command};
 use rand::{distributions::Alphanumeric, Rng};
-use reqwest::blocking::{Client, Response};
+use reqwest::blocking::{ClientBuilder, Response};
 use std::fs::File;
 use sha2::{Sha256, Digest};
 use std::io::{self, Read, Write};
@@ -36,8 +36,11 @@ fn generate_random_text_file(filename: &Path, size: usize) -> io::Result<String>
     Ok(hex::encode(hasher.finalize()))
 }
 
-fn upload_file(server_url: &str, filename: &Path) -> reqwest::Result<Response> {
-    let client = Client::new();
+fn upload_file(server_url: &str, filename: &Path) -> reqwest::Result<reqwest::blocking::Response> {
+    let client = ClientBuilder::new()
+        .danger_accept_invalid_certs(true)
+        .build()?;
+
     let url = format!("{}/upload", server_url);
     let form = reqwest::blocking::multipart::Form::new()
         .file("file", filename).unwrap();
@@ -48,7 +51,10 @@ fn upload_file(server_url: &str, filename: &Path) -> reqwest::Result<Response> {
 }
 
 fn download_file(server_url: &str, filename: &str, chunked: bool) -> Result<String, reqwest::Error> {
-    let client = Client::new();
+    let client = ClientBuilder::new()
+        .danger_accept_invalid_certs(true)
+        .build()?;
+
     let endpoint = if chunked { "download-chunked" } else { "download" };
     let url = format!("{}/{}/{}", server_url, endpoint, filename);
     let mut response = client.get(url).send()?;
@@ -62,7 +68,10 @@ fn download_file(server_url: &str, filename: &str, chunked: bool) -> Result<Stri
 }
 
 fn delete_file(server_url: &str, filename: &str) -> reqwest::Result<Response> {
-    let client = Client::new();
+    let client = ClientBuilder::new()
+        .danger_accept_invalid_certs(true)
+        .build()?;
+
     let url = format!("{}/{}", server_url, filename);
     client.delete(url).send()
 }
