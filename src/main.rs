@@ -5,6 +5,17 @@ use std::fs::File;
 use sha2::{Sha256, Digest};
 use std::io::{self, Read, Write};
 use std::path::Path;
+use thiserror::Error;
+
+// Define a custom error type
+#[derive(Error, Debug)]
+pub enum DownloadError {
+    #[error("Network error")]
+    Network(#[from] reqwest::Error),
+
+    #[error("IO error")]
+    Io(#[from] io::Error),
+}
 
 fn generate_random_text_file(filename: &Path, size: usize) -> io::Result<String> {
     if filename.exists() && filename.metadata()?.len() as usize == size {
@@ -50,7 +61,7 @@ fn upload_file(server_url: &str, filename: &Path) -> reqwest::Result<reqwest::bl
     Ok(response)
 }
 
-fn download_file(server_url: &str, filename: &str, chunked: bool) -> Result<String, reqwest::Error> {
+fn download_file(server_url: &str, filename: &str, chunked: bool) -> Result<String, DownloadError> {
     let client = ClientBuilder::new()
         .danger_accept_invalid_certs(true)
         .build()?;
@@ -61,7 +72,9 @@ fn download_file(server_url: &str, filename: &str, chunked: bool) -> Result<Stri
 
     let mut hasher = Sha256::new();
     let mut buffer = Vec::new();
-    response.read_to_end(&mut buffer).unwrap();
+
+    response.read_to_end(&mut buffer)?;
+
     hasher.update(&buffer);
 
     Ok(hex::encode(hasher.finalize()))
