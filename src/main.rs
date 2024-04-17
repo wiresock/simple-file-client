@@ -113,7 +113,8 @@ fn main() -> reqwest::Result<()> {
              .long("chunked")
              .short('c')
              .help("Enables chunked download")
-             .action(clap::ArgAction::SetTrue)) // Set the action for this argument)
+             .action(clap::ArgAction::SetTrue)
+             .default_value("false")) // Set the action for this argument)
         .arg(Arg::new("server")
              .long("server")
              .short('s')
@@ -175,7 +176,7 @@ fn main() -> reqwest::Result<()> {
                     eprintln!("Server URL is required for downloading files.");
                     std::process::exit(1);
                 }
-                let chunked = matches.contains_id("chunked");
+                let chunked = matches.get_one::<bool>("chunked").copied().unwrap_or(false);
                 match download_file(server_url.unwrap(), file, chunked) {
                     Ok(hash) => println!("Downloaded file {file} SHA256: {hash}"),
                     Err(e) => eprintln!("Error: {}", e),
