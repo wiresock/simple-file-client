@@ -1,12 +1,12 @@
+use chrono::Local;
 use clap::{Arg, Command};
 use rand::{distributions::Alphanumeric, Rng};
 use reqwest::blocking::{ClientBuilder, Response};
+use sha2::{Digest, Sha256};
 use std::fs::File;
-use sha2::{Sha256, Digest};
 use std::io::{self, Read, Write};
 use std::path::Path;
 use thiserror::Error;
-use chrono::Local;
 
 // Define a custom error type
 #[derive(Error, Debug)]
@@ -20,7 +20,10 @@ pub enum DownloadError {
 
 fn generate_random_text_file(filename: &Path, size: usize) -> io::Result<String> {
     if filename.exists() && filename.metadata()?.len() as usize == size {
-        println!("File: {:?} already exists with the correct size of {} bytes.", filename, size);
+        println!(
+            "File: {:?} already exists with the correct size of {} bytes.",
+            filename, size
+        );
         return Ok(hex::encode(Sha256::digest(&std::fs::read(filename)?)));
     }
 
@@ -48,26 +51,34 @@ fn generate_random_text_file(filename: &Path, size: usize) -> io::Result<String>
     Ok(hex::encode(hasher.finalize()))
 }
 
-fn upload_file(server_url: &str, filename: &Path) -> Result<reqwest::blocking::Response, Box<dyn std::error::Error>> {
+fn upload_file(
+    server_url: &str,
+    filename: &Path,
+) -> Result<reqwest::blocking::Response, Box<dyn std::error::Error>> {
     let client = ClientBuilder::new()
         .danger_accept_invalid_certs(true)
         .build()?;
 
     let url = format!("{}/upload", server_url);
-    let form = reqwest::blocking::multipart::Form::new()
-        .file("file", filename)?; // Propagate the error instead of unwrapping
-    let response = client.post(url)
-        .multipart(form)
-        .send()?;
+    let form = reqwest::blocking::multipart::Form::new().file("file", filename)?; // Propagate the error instead of unwrapping
+    let response = client.post(url).multipart(form).send()?;
     Ok(response)
 }
 
-fn download_file(server_url: &str, filename: &str, chunked: bool) -> Result<String, DownloadError> {
+fn download_file(
+    server_url: &str,
+    filename: &str,
+    chunked: bool,
+) -> Result<(usize, String), DownloadError> {
     let client = ClientBuilder::new()
         .danger_accept_invalid_certs(true)
         .build()?;
 
-    let endpoint = if chunked { "download-chunked" } else { "download" };
+    let endpoint = if chunked {
+        "download-chunked"
+    } else {
+        "download"
+    };
     let url = format!("{}/{}/{}", server_url, endpoint, filename);
     let mut response = client.get(url).send()?;
 
@@ -78,7 +89,7 @@ fn download_file(server_url: &str, filename: &str, chunked: bool) -> Result<Stri
 
     hasher.update(&buffer);
 
-    Ok(hex::encode(hasher.finalize()))
+    Ok((buffer.len(), hex::encode(hasher.finalize())))
 }
 
 fn delete_file(server_url: &str, filename: &str) -> reqwest::Result<Response> {
@@ -95,43 +106,57 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .version("1.0")
         .author("Vadim Smirnov <vadim@ntkernel.com>")
         .about("Handles file operations with a server")
-        .arg(Arg::new("generate")
-             .long("generate")
-             .short('g')
-             .value_name("FILE")
-             .help("Generates a file of specified size"))
-        .arg(Arg::new("upload")
-             .long("upload")
-             .short('u')
-             .value_name("FILE")
-             .help("Uploads the specified file"))
-        .arg(Arg::new("download")
-             .long("download")
-             .short('d')
-             .value_name("FILE")
-             .help("Downloads the specified file"))
-        .arg(Arg::new("chunked")
-             .long("chunked")
-             .short('c')
-             .help("Enables chunked download")
-             .action(clap::ArgAction::SetTrue)
-             .default_value("false")) // Set the action for this argument)
-        .arg(Arg::new("server")
-             .long("server")
-             .short('s')
-             .value_name("URL")
-             .help("Sets the server URL")
-             .required(false))
-        .arg(Arg::new("size")
-             .long("size")
-             .value_name("SIZE")
-             .help("Sets the file size for generation"))
-        .arg(Arg::new("iterations")
-             .long("iterations")
-             .short('i')
-             .value_name("NUMBER")
-             .help("Specifies the number of iterations for upload/download")
-             .default_value("1")) // Default to 1 iteration)
+        .arg(
+            Arg::new("generate")
+                .long("generate")
+                .short('g')
+                .value_name("FILE")
+                .help("Generates a file of specified size"),
+        )
+        .arg(
+            Arg::new("upload")
+                .long("upload")
+                .short('u')
+                .value_name("FILE")
+                .help("Uploads the specified file"),
+        )
+        .arg(
+            Arg::new("download")
+                .long("download")
+                .short('d')
+                .value_name("FILE")
+                .help("Downloads the specified file"),
+        )
+        .arg(
+            Arg::new("chunked")
+                .long("chunked")
+                .short('c')
+                .help("Enables chunked download")
+                .action(clap::ArgAction::SetTrue)
+                .default_value("false"),
+        ) // Set the action for this argument)
+        .arg(
+            Arg::new("server")
+                .long("server")
+                .short('s')
+                .value_name("URL")
+                .help("Sets the server URL")
+                .required(false),
+        )
+        .arg(
+            Arg::new("size")
+                .long("size")
+                .value_name("SIZE")
+                .help("Sets the file size for generation"),
+        )
+        .arg(
+            Arg::new("iterations")
+                .long("iterations")
+                .short('i')
+                .value_name("NUMBER")
+                .help("Specifies the number of iterations for upload/download")
+                .default_value("1"),
+        ) // Default to 1 iteration)
         .get_matches();
 
     if !matches.args_present() {
@@ -142,12 +167,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_url = matches.get_one::<String>("server");
 
     let iterations = matches
-    .get_one::<String>("iterations")
-    .and_then(|it| it.parse::<usize>().ok())
-    .unwrap_or(1);
+        .get_one::<String>("iterations")
+        .and_then(|it| it.parse::<usize>().ok())
+        .unwrap_or(1);
 
     if let Some(file) = matches.get_one::<String>("generate") {
-        let size = matches.get_one::<String>("size").map(|s| s.parse().unwrap()).unwrap_or(1024);
+        let size = matches
+            .get_one::<String>("size")
+            .map(|s| s.parse().unwrap())
+            .unwrap_or(1024);
         let path = Path::new(file);
         match generate_random_text_file(path, size) {
             Ok(hash) => println!("SHA256: {}", hash),
@@ -158,7 +186,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Check if upload is specified
             if let Some(file) = matches.get_one::<String>("upload") {
                 if server_url.is_none() {
-                    eprintln!("{} - Server URL is required for uploading files.", Local::now());
+                    eprintln!(
+                        "{} - Server URL is required for uploading files.",
+                        Local::now()
+                    );
                     std::process::exit(1);
                 }
                 let server = server_url.unwrap();
@@ -169,7 +200,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Proceed to upload the file
                 println!("{} - Start uploading file: {}", Local::now(), file);
                 match upload_file(server, Path::new(file)) {
-                    Ok(response) => println!("{} - {}: Uploaded. Status: {}", Local::now(), file, response.status()),
+                    Ok(response) => println!(
+                        "{} - {}: Uploaded. Status: {}",
+                        Local::now(),
+                        file,
+                        response.status()
+                    ),
                     Err(e) => eprintln!("{} - Error uploading file {}: {}", Local::now(), file, e),
                 }
             }
@@ -177,14 +213,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Check if download is specified
             if let Some(file) = matches.get_one::<String>("download") {
                 if server_url.is_none() {
-                    eprintln!("{} - Server URL is required for downloading files.", Local::now());
+                    eprintln!(
+                        "{} - Server URL is required for downloading files.",
+                        Local::now()
+                    );
                     std::process::exit(1);
                 }
                 let chunked = matches.get_one::<bool>("chunked").copied().unwrap_or(false);
                 println!("{} - Start downloading file: {}", Local::now(), file);
                 match download_file(server_url.unwrap(), file, chunked) {
-                    Ok(hash) => println!("{} - {}: Downloaded chunked = {} SHA256: {}", Local::now(), file, chunked, hash),
-                    Err(e) => eprintln!("{} - Error downloading file {}: {}", Local::now(), file, e),
+                    Ok((size, hash)) => println!(
+                        "{} - {}: Downloaded chunked = {} Size = {} bytes SHA256: {}",
+                        Local::now(),
+                        file,
+                        chunked,
+                        size,
+                        hash
+                    ),
+                    Err(e) => {
+                        eprintln!("{} - Error downloading file {}: {}", Local::now(), file, e)
+                    }
                 }
             }
         }
