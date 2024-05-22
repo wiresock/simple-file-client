@@ -47,14 +47,14 @@ fn generate_random_text_file(filename: &Path, size: usize) -> io::Result<String>
     Ok(hex::encode(hasher.finalize()))
 }
 
-fn upload_file(server_url: &str, filename: &Path) -> reqwest::Result<reqwest::blocking::Response> {
+fn upload_file(server_url: &str, filename: &Path) -> Result<reqwest::blocking::Response, Box<dyn std::error::Error>> {
     let client = ClientBuilder::new()
         .danger_accept_invalid_certs(true)
         .build()?;
 
     let url = format!("{}/upload", server_url);
     let form = reqwest::blocking::multipart::Form::new()
-        .file("file", filename).unwrap();
+        .file("file", filename)?; // Propagate the error instead of unwrapping
     let response = client.post(url)
         .multipart(form)
         .send()?;
@@ -89,7 +89,7 @@ fn delete_file(server_url: &str, filename: &str) -> reqwest::Result<Response> {
     client.delete(url).send()
 }
 
-fn main() -> reqwest::Result<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let matches = Command::new("File Server Client")
         .version("1.0")
         .author("Vadim Smirnov <vadim@ntkernel.com>")
@@ -167,7 +167,7 @@ fn main() -> reqwest::Result<()> {
 
                 // Proceed to upload the file
                 let response = upload_file(server, Path::new(file))?;
-                println!("Uploaded file: {}, Status: {}", file, response.status());
+                println!("{file}: Uploaded. Status: {}", response.status());
             }
 
             // Check if download is specified
@@ -178,7 +178,7 @@ fn main() -> reqwest::Result<()> {
                 }
                 let chunked = matches.get_one::<bool>("chunked").copied().unwrap_or(false);
                 match download_file(server_url.unwrap(), file, chunked) {
-                    Ok(hash) => println!("Downloaded file {file} SHA256: {hash}"),
+                    Ok(hash) => println!("{file}: Downloaded chunked = {chunked} SHA256: {hash}"),
                     Err(e) => eprintln!("Error: {}", e),
                 }
             }
