@@ -7,6 +7,7 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::Path;
 use thiserror::Error;
+use std::time::Duration;
 
 // Define a custom error type
 #[derive(Error, Debug)]
@@ -54,9 +55,11 @@ fn generate_random_text_file(filename: &Path, size: usize) -> io::Result<String>
 fn upload_file(
     server_url: &str,
     filename: &Path,
+    timeout_secs: u64,
 ) -> Result<reqwest::blocking::Response, Box<dyn std::error::Error>> {
     let client = ClientBuilder::new()
         .danger_accept_invalid_certs(true)
+        .timeout(Duration::from_secs(timeout_secs)) // Set the timeout to the specified number of seconds
         .build()?;
 
     let url = format!("{}/upload", server_url);
@@ -150,6 +153,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .help("Sets the file size for generation"),
         )
         .arg(
+            Arg::new("timeout")
+                .long("timeout")
+                .short('t')
+                .value_name("TIMEOUT")
+                .help("Specifies the HTTP request timeout for upload")
+                .default_value("30"),
+        ) // Default to 1 iteration)
+        .arg(
             Arg::new("iterations")
                 .long("iterations")
                 .short('i')
@@ -170,6 +181,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .get_one::<String>("iterations")
         .and_then(|it| it.parse::<usize>().ok())
         .unwrap_or(1);
+
+    let timeout = matches
+        .get_one::<String>("timeout")
+        .and_then(|it| it.parse::<u64>().ok())
+        .unwrap_or(30);
 
     if let Some(file) = matches.get_one::<String>("generate") {
         let size = matches
@@ -199,7 +215,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Proceed to upload the file
                 println!("{} - Start uploading file: {}", Local::now(), file);
-                match upload_file(server, Path::new(file)) {
+                match upload_file(server, Path::new(file), timeout) {
                     Ok(response) => println!(
                         "{} - {}: Uploaded. Status: {}",
                         Local::now(),
