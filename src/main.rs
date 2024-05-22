@@ -6,6 +6,7 @@ use sha2::{Sha256, Digest};
 use std::io::{self, Read, Write};
 use std::path::Path;
 use thiserror::Error;
+use chrono::Local;
 
 // Define a custom error type
 #[derive(Error, Debug)]
@@ -157,7 +158,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Check if upload is specified
             if let Some(file) = matches.get_one::<String>("upload") {
                 if server_url.is_none() {
-                    eprintln!("Server URL is required for uploading files.");
+                    eprintln!("{} - Server URL is required for uploading files.", Local::now());
                     std::process::exit(1);
                 }
                 let server = server_url.unwrap();
@@ -166,20 +167,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let _ = delete_file(server, file);
 
                 // Proceed to upload the file
-                let response = upload_file(server, Path::new(file))?;
-                println!("{file}: Uploaded. Status: {}", response.status());
+                println!("{} - Start uploading file: {}", Local::now(), file);
+                match upload_file(server, Path::new(file)) {
+                    Ok(response) => println!("{} - {}: Uploaded. Status: {}", Local::now(), file, response.status()),
+                    Err(e) => eprintln!("{} - Error uploading file {}: {}", Local::now(), file, e),
+                }
             }
 
             // Check if download is specified
             if let Some(file) = matches.get_one::<String>("download") {
                 if server_url.is_none() {
-                    eprintln!("Server URL is required for downloading files.");
+                    eprintln!("{} - Server URL is required for downloading files.", Local::now());
                     std::process::exit(1);
                 }
                 let chunked = matches.get_one::<bool>("chunked").copied().unwrap_or(false);
+                println!("{} - Start downloading file: {}", Local::now(), file);
                 match download_file(server_url.unwrap(), file, chunked) {
-                    Ok(hash) => println!("{file}: Downloaded chunked = {chunked} SHA256: {hash}"),
-                    Err(e) => eprintln!("Error: {}", e),
+                    Ok(hash) => println!("{} - {}: Downloaded chunked = {} SHA256: {}", Local::now(), file, chunked, hash),
+                    Err(e) => eprintln!("{} - Error downloading file {}: {}", Local::now(), file, e),
                 }
             }
         }
