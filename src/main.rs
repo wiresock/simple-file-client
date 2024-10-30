@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::Path;
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 use thiserror::Error;
 
 // Define a custom error type
@@ -198,6 +198,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err(e) => eprintln!("Error: {}", e),
         }
     } else {
+        let mut upload_durations = Vec::new();
+        let mut download_durations = Vec::new();
+
         for _ in 0..iterations {
             // Check if upload is specified
             if let Some(file) = matches.get_one::<String>("upload") {
@@ -221,8 +224,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 match upload_file(server, Path::new(file), timeout) {
                     Ok(response) => {
-                        // Calculate the duration
+                        // Calculate the duration and store it
                         let duration = start_time.elapsed();
+                        upload_durations.push(duration);
                         println!(
                             "{} - {}: Uploaded. Status: {}\nTime taken: {:.2?} seconds",
                             Local::now(),
@@ -253,8 +257,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 match download_file(server_url.unwrap(), file, chunked) {
                     Ok((size, hash)) => {
-                        // Calculate the duration
+                        // Calculate the duration and store it
                         let duration = start_time.elapsed();
+                        download_durations.push(duration);
                         println!(
                             "{} - {}: Downloaded chunked = {} Size = {} bytes SHA256: {}\nTime taken: {:.2?} seconds",
                             Local::now(),
@@ -271,6 +276,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
+
+        // Calculate and print the average times
+        let average_upload =
+            upload_durations.iter().copied().sum::<Duration>() / upload_durations.len() as u32;
+        let average_download =
+            download_durations.iter().copied().sum::<Duration>() / download_durations.len() as u32;
+
+        println!(
+            "{} - Average upload time: {:.2?} seconds",
+            Local::now(),
+            average_upload
+        );
+        println!(
+            "{} - Average download time: {:.2?} seconds",
+            Local::now(),
+            average_download
+        );
     }
 
     Ok(())
