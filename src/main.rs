@@ -6,8 +6,8 @@ use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::Path;
+use std::time::{Instant, Duration};
 use thiserror::Error;
-use std::time::Duration;
 
 // Define a custom error type
 #[derive(Error, Debug)]
@@ -215,13 +215,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Proceed to upload the file
                 println!("{} - Start uploading file: {}", Local::now(), file);
+
+                // Record start time
+                let start_time = Instant::now();
+
                 match upload_file(server, Path::new(file), timeout) {
-                    Ok(response) => println!(
-                        "{} - {}: Uploaded. Status: {}",
-                        Local::now(),
-                        file,
-                        response.status()
-                    ),
+                    Ok(response) => {
+                        // Calculate the duration
+                        let duration = start_time.elapsed();
+                        println!(
+                            "{} - {}: Uploaded. Status: {}\nTime taken: {:.2?} seconds",
+                            Local::now(),
+                            file,
+                            response.status(),
+                            duration
+                        );
+                    }
                     Err(e) => eprintln!("{} - Error uploading file {}: {}", Local::now(), file, e),
                 }
             }
@@ -235,17 +244,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     );
                     std::process::exit(1);
                 }
+
                 let chunked = matches.get_one::<bool>("chunked").copied().unwrap_or(false);
                 println!("{} - Start downloading file: {}", Local::now(), file);
+
+                // Record start time
+                let start_time = Instant::now();
+
                 match download_file(server_url.unwrap(), file, chunked) {
-                    Ok((size, hash)) => println!(
-                        "{} - {}: Downloaded chunked = {} Size = {} bytes SHA256: {}",
-                        Local::now(),
-                        file,
-                        chunked,
-                        size,
-                        hash
-                    ),
+                    Ok((size, hash)) => {
+                        // Calculate the duration
+                        let duration = start_time.elapsed();
+                        println!(
+                            "{} - {}: Downloaded chunked = {} Size = {} bytes SHA256: {}\nTime taken: {:.2?} seconds",
+                            Local::now(),
+                            file,
+                            chunked,
+                            size,
+                            hash,
+                            duration
+                        );
+                    }
                     Err(e) => {
                         eprintln!("{} - Error downloading file {}: {}", Local::now(), file, e)
                     }
