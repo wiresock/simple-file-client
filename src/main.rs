@@ -278,21 +278,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Calculate and print the average times
-        let average_upload =
-            upload_durations.iter().copied().sum::<Duration>() / upload_durations.len() as u32;
-        let average_download =
-            download_durations.iter().copied().sum::<Duration>() / download_durations.len() as u32;
+        if upload_durations.len() > 0 {
+            let average_upload =
+                upload_durations.iter().copied().sum::<Duration>() / upload_durations.len() as u32;
+            println!(
+                "{} - Average upload time: {:.2?} seconds",
+                Local::now(),
+                average_upload
+            );
+        }
 
-        println!(
-            "{} - Average upload time: {:.2?} seconds",
-            Local::now(),
-            average_upload
-        );
-        println!(
-            "{} - Average download time: {:.2?} seconds",
-            Local::now(),
-            average_download
-        );
+        if download_durations.len() > 0 {
+            let average_download = download_durations.iter().copied().sum::<Duration>()
+                / download_durations.len() as u32;
+
+            println!(
+                "{} - Average download time: {:.2?} seconds",
+                Local::now(),
+                average_download
+            );
+        }
     }
 
     Ok(())
